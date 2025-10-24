@@ -1,0 +1,36 @@
+WITH performance_query AS (
+  SELECT
+    timestamp_micros(event_timestamp) as event_timestamp,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_referrer') AS page_referrer,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_location') AS page_location,
+    (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'page_load_time') AS page_load_time,
+    (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'content_load_time') AS content_load_time,
+    (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'dom_interactive_time') AS dom_interactive_time,
+    (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'server_response_time') AS server_response_time,
+    (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'page_download_time') AS page_download_time,
+    (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'dns_time') AS dns_time,
+    (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'redirect_response_time') AS redirect_response_time
+  FROM
+    `enter.tablename_123456.events_*`
+  WHERE
+    event_name = 'performance_timing'
+)
+
+SELECT
+  DATE(event_timestamp) AS event_date,
+  EXTRACT(ISOWEEK FROM event_timestamp) AS week,
+  TIME(event_timestamp) AS event_time,
+  EXTRACT(HOUR FROM event_timestamp) AS event_hour,
+  SPLIT(page_referrer, '?')[SAFE_OFFSET(0)] AS page_referrer,
+  SPLIT(page_location, '?')[SAFE_OFFSET(0)] AS page_location,
+  page_load_time/1000 as page_load_time_secs,
+  content_load_time/1000 AS content_load_time_secs,
+  dom_interactive_time/1000 AS dom_interactive_time_secs,
+  server_response_time/1000 AS server_response_time_secs,
+  page_download_time/1000 AS page_download_time_secs,
+  dns_time/1000 AS dns_time_secs,
+  redirect_response_time/1000 as redirect_response_time_secs
+FROM
+  performance_query
+ORDER BY
+  1 DESC, 2 DESC;
