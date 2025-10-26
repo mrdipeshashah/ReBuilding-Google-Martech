@@ -4,6 +4,10 @@ SELECT
   split((SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_location'), '?')[SAFE_OFFSET(0)] AS page_location,
   (select value.string_value from unnest(event_params) where key = 'tag_category') as tag_category,
   (select value.string_value from unnest(event_params) where key = 'tag_name') as tag_name,
+  (select value.string_value from unnest(event_params) where key = 'environment') as environment,
+  (select value.string_value from unnest(event_params) where key = 'domain') as domain,
+  (select value.string_value from unnest(event_params) where key = 'continent') as continent,
+  (select value.string_value from unnest(event_params) where key = 'country') as country, 
   (select timestamp_millis(value.int_value) from unnest(event_params) where key = 'timestamp') as event_timestamp,
   event_date,
   (select extract(hour from timestamp_millis(value.int_value)) from unnest(event_params) where key = 'timestamp') as hour,
@@ -20,5 +24,5 @@ SELECT
     lpad(cast((select extract(SECOND from timestamp_millis(value.int_value)) from UNNEST(event_params) where key = 'timestamp') as string), 2, '0')
   ) as event_hour_minute_second,
   1 as count
-FROM  `enter.tablename_123456.events_*`
-WHERE event_name NOT IN ('user_engagement','performance_timing', 'page_view')
+FROM  `mrdipeshashah.analytics_343520795.events_20251024`
+WHERE event_name NOT IN ('user_engagement','performance_timing')
