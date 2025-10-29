@@ -1,1 +1,1 @@
-The GTM JSON container will provide the structure for the Google Analytics tags the additional data that is collected under event parameters will be available in Big Query. The different Big Query codes shared refelcts these changes  
+The GTM JSON container provides the structure for the Google Analytics tags and the additional data that is collected under event parameters will be available in Big Query. The different Big Query codes shared refelcts these changes  
