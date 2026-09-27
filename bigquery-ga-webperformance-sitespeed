@@ -1,13 +1,13 @@
 WITH performance_query AS (
   SELECT
-    timestamp_micros(event_timestamp) as event_timestamp,
+    TIMESTAMP_MICROS(event_timestamp) AS event_timestamp,
+    device.category AS device_category,
+    device.mobile_brand_name AS device_brand,
+    device.mobile_marketing_name AS device_brand_mobile,
+    device.operating_system AS device_operator,
+    device.operating_system_version AS device_operator_version,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_referrer') AS page_referrer,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_location') AS page_location,
-    (select value.string_value from unnest(event_params) WHERE key = 'tag_name') as tag_name,
-    (select value.string_value FROM UNNEST(event_params) WHERE key = 'environment') as environment,
-    (select value.string_value FROM UNNEST(event_params) WHERE key = 'domain') as domain,
-    (select value.string_value FROM UNNEST(event_params) WHERE key = 'continent') as continent,
-    (select value.string_value FROM UNNEST(event_params) WHERE key = 'country') as country,  
     (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'page_load_time') AS page_load_time,
     (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'content_load_time') AS content_load_time,
     (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'dom_interactive_time') AS dom_interactive_time,
@@ -15,28 +15,33 @@ WITH performance_query AS (
     (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'page_download_time') AS page_download_time,
     (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'dns_time') AS dns_time,
     (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'redirect_response_time') AS redirect_response_time
-  FROM
-    `enter.tablename_123456.events_*`
-  WHERE
-    event_name = 'performance_timing'
+  FROM `enter.tablename_123456.events_*`
+WHERE event_name = 'performance_timing'
+  -- Change 30 to 65 to allow for a 30-day comparison + buffer
+  AND _TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 65 DAY))
+                        AND FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY))
 )
 
 SELECT
-  tag_name,
   DATE(event_timestamp) AS event_date,
   EXTRACT(ISOWEEK FROM event_timestamp) AS week,
-  TIME(event_timestamp) AS event_time,
   EXTRACT(HOUR FROM event_timestamp) AS event_hour,
+  device_category,
+  device_brand,
+  device_brand_mobile,
+  device_operator,
+  device_operator_version,
   SPLIT(page_referrer, '?')[SAFE_OFFSET(0)] AS page_referrer,
   SPLIT(page_location, '?')[SAFE_OFFSET(0)] AS page_location,
-  page_load_time/1000 as page_load_time_secs,
-  content_load_time/1000 AS content_load_time_secs,
-  dom_interactive_time/1000 AS dom_interactive_time_secs,
-  server_response_time/1000 AS server_response_time_secs,
-  page_download_time/1000 AS page_download_time_secs,
-  dns_time/1000 AS dns_time_secs,
-  redirect_response_time/1000 as redirect_response_time_secs
-FROM
-  performance_query
-ORDER BY
-  1 DESC, 2 DESC;
+  -- Raw Metrics for Scorecards (set to AVG in Looker)
+  SAFE_DIVIDE(CAST(page_load_time AS FLOAT64), 1000) AS page_load_time_secs,
+  SAFE_DIVIDE(CAST(content_load_time AS FLOAT64), 1000) AS content_load_time_secs,
+  SAFE_DIVIDE(CAST(dom_interactive_time AS FLOAT64), 1000) AS dom_interactive_time_secs,
+  SAFE_DIVIDE(CAST(server_response_time AS FLOAT64), 1000) AS server_response_time_secs,
+  SAFE_DIVIDE(CAST(page_download_time AS FLOAT64), 1000) AS page_download_time_secs,
+  SAFE_DIVIDE(CAST(dns_time AS FLOAT64), 1000) AS dns_time_secs,
+  SAFE_DIVIDE(CAST(redirect_response_time AS FLOAT64), 1000) AS redirect_response_time_secs,
+  -- Volume Metric (set to SUM in Looker)
+  1 AS page_load_volume
+FROM performance_query
+ORDER BY event_date DESC, event_hour DESC;
