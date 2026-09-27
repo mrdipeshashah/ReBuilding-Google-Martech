@@ -1,28 +1,48 @@
-SELECT
+WITH base_events AS (
+  SELECT
+    PARSE_DATE('%Y%m%d', event_date) AS date,
+    event_name,
+    user_pseudo_id,
+    -- Extracting session_id
+    (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS session_id,
+    
+    -- GTM Tagging Parameters (LOWER for consistency)
+    LOWER((SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'tag_name')) AS tag_name,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'container_id') AS container_id,
+    
+    -- Versioning & Metadata
+    IFNULL((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'container_version'), 0) AS container_version,
+    LOWER((SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'tag_category')) AS tag_category,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'tag_date_creation') AS tag_date_creation,
+    
+    -- Precision timestamps for the audit trail
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'hit_timestamp') AS gtm_hit_time
+    
+  FROM `enter.tablename_123456.events_*`
+  -- DATE FILTER: Set this to 2025 for your Staging or 2026 for Production
+  WHERE _TABLE_SUFFIX BETWEEN '20250101' AND '20260331'
+    AND event_name NOT IN ('user_engagement','scroll','session_start','first_visit')
+)
+
+SELECT 
+  date,
   event_name,
-  user_pseudo_id,
-  split((SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_location'), '?')[SAFE_OFFSET(0)] AS page_location,
-  (select value.string_value from unnest(event_params) where key = 'tag_category') as tag_category,
-  (select value.string_value from unnest(event_params) where key = 'tag_name') as tag_name,
-  (select value.string_value from unnest(event_params) where key = 'environment') as environment,
-  (select value.string_value from unnest(event_params) where key = 'domain') as domain,
-  (select value.string_value from unnest(event_params) where key = 'continent') as continent,
-  (select value.string_value from unnest(event_params) where key = 'country') as country, 
-  (select timestamp_millis(value.int_value) from unnest(event_params) where key = 'timestamp') as event_timestamp,
-  event_date,
-  (select extract(hour from timestamp_millis(value.int_value)) from unnest(event_params) where key = 'timestamp') as hour,
-  concat(
-    cast((select extract(HOUR from timestamp_millis(value.int_value)) from UNNEST(event_params) where key = 'timestamp') as string),
-    ':',
-    lpad(cast((select extract(MINUTE from timestamp_millis(value.int_value)) from UNNEST(event_params) where key = 'timestamp') as string), 2, '0')
-  ) as event_hour_minute,
-  concat(
-    cast((select extract(HOUR from timestamp_millis(value.int_value)) from UNNEST(event_params) where key = 'timestamp') as string),
-    ':',
-    lpad(cast((select extract(MINUTE from timestamp_millis(value.int_value)) from UNNEST(event_params) where key = 'timestamp') as string), 2, '0'),
-    ':',
-    lpad(cast((select extract(SECOND from timestamp_millis(value.int_value)) from UNNEST(event_params) where key = 'timestamp') as string), 2, '0')
-  ) as event_hour_minute_second,
-  1 as count
-FROM  `mrdipeshashah.analytics_343520795.events_20251024`
-WHERE event_name NOT IN ('user_engagement','performance_timing')
+  tag_name,
+  container_id,
+  container_version,
+  tag_category,
+  tag_date_creation,
+  
+  -- The "Heartbeat" Metrics
+  MIN(gtm_hit_time) AS first_hit_recorded,
+  MAX(gtm_hit_time) AS last_hit_recorded,
+  
+  -- Volume Metrics
+  COUNT(*) AS hit_count,
+  COUNT(DISTINCT CONCAT(user_pseudo_id, CAST(session_id AS STRING))) AS session_count
+
+FROM base_events
+-- We keep this broad so the table isn't blank if some tags are missing
+WHERE event_name IN ('page_view', 'view_item','view_item_list','add_to_cart', 'begin_checkout', 'select_item', 'purchase')
+GROUP BY 1, 2, 3, 4, 5, 6, 7
+ORDER BY date DESC, hit_count DESC
